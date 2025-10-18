@@ -21,8 +21,8 @@
 | 2 | 10:30–11:30 | 강의+실습 | 11–25 | 결제 컨트랙트 설계 | 요구사항 → ERD 화이트보드 |
 | 3 | 11:30–13:00 | 실습 | 26–45 | 코딩 & 테스트 | Hardhat deploy · wagmi 프론트 연동 |
 | LUNCH | 13:00–14:00 | 자유 | – | – | 네트워킹 & 데모 영상 플레이 |
-| 4 | 14:00–15:30 | 강의+실습 | 46–70 | 예산 분배 시스템 구현 | trigger 패턴, 타임락 실습 |
-| 5 | 15:30–17:00 | 실습 | 71–90 | 컨트랙트 고도화 · 웹 연결 | Upgradeable Proxy, UI 커스터마이즈 |
+| 4 | 14:00–15:30 | 강의+실습 | 46–70 | 간단 급여 시스템 구현 | 기본 급여 등록·일괄 지급 |
+| 5 | 15:30–17:00 | 실습 | 71–90 | 웹 연동(기본) | 지갑 연결·쓰기 호출·이벤트 Toast |
 | 6 | 17:00–18:00 | 실습+멘토링 | 91–100 | 개인 프로젝트 피드백 | 1:1 코드 리뷰, 아키텍처 설계 조언 |
 
 ---
@@ -46,9 +46,9 @@
 | 13 | 상태 변수·구조체 | `struct Shop { uint256 limit; }` | OpenZeppelin Guide |
 | 20 | modifier & require | `onlyOwner`, `require(msg.value>0)` | OZ Ownable |
 | 28 | 이벤트 | `event Receipt(address payer,uint256 amt);` | EVM Logs |
-| 32 | mapping & EnumerableSet | `mapping(bytes32=>Shop)` | OZ Enumerable |
-| 37 | MerkleProof | `MerkleProof.verify(...)` | OZ MerkleProof |
-| 50 | Proxy pattern | `TransparentUpgradeableProxy` | OZ Upgrades |
+| 32 | mapping | `mapping(bytes32=>Shop)` | Solidity mapping |
+| 37 | AccessControl(선택) | `onlyOwner` 또는 간단 role | OZ Ownable |
+| 50 | 이벤트 | `event Receipt(address,uint256)` | EVM Logs |
 
 > 각 문법에는 **“한줄 해설”** 노란 주석을 포함해 슬라이드 내 `<CodeBlock>`에 표시됩니다.
 
@@ -83,30 +83,34 @@
    - StepB: 이벤트 Listen & Next.js 토스트 출력
 4. **검증**: Hardhat test 4개 통과
 
-### 세션 4: 스테이블 코인 기반 급여 지급 시스템 (p.46–70)
-- **Objective**: 중소·벤처 기업이 스테이블 코인으로 월급·보너스를 자동 지급하는 온체인 Payroll 설계 습득
+### 세션 4: 스테이블 코인 기반 급여 지급 시스템 – 기본형 (p.46–70)
+- **Objective**: 간단한 급여 지급 흐름을 구현하며 이벤트·권한·전송 로직을 익힌다.
 - **시나리오**
-  1. 인사팀이 직원 정보를 CSV로 업로드 → 컨트랙트에 Merkle Root 저장
-  2. 매월 `triggerPayroll()` 호출 시 직원별 급여·세금·복지 포인트 분리 송금
-  3. 환율 변동 방지를 위해 급여 확정 시점의 `oraclePrice`로 고정
-  4. 법정화폐 회계 처리용 Proof-of-Payment 이벤트 발행
+  1. 관리자가 월별 급여표를 컨트랙트에 등록(`setSalary(employee, amount)`).
+  2. 관리자 한 번의 호출로 일괄 지급(`payAll()`), 혹은 직원이 스스로 수령(`claim()`).
+  3. 지급 시 `ProofOfPayment(employee, amount)` 이벤트 발행.
 - **Code Walkthrough**
   ```solidity
-  function triggerPayroll(uint256 month, bytes32[] calldata proof) external onlyRole(PAYROLL) {
-      bytes32 root = payrollRoots[month];
-      require(MerkleProof.verify(proof, root, keccak256(abi.encode(msg.sender, amount))), "Not in payroll");
-      _pay(msg.sender, amount);
+  function setSalary(address employee, uint256 amount) external onlyOwner {
+      salaries[employee] = amount;
+  }
+
+  function claim() external {
+      uint256 amount = salaries[msg.sender];
+      require(amount > 0, "NO_SALARY");
+      salaries[msg.sender] = 0;
+      stableToken.transfer(msg.sender, amount);
+      emit ProofOfPayment(msg.sender, amount);
   }
   ```
 - **활동**
-  - 수강생 팀별로 인사 CSV → Merkle tree 변환 스크립트 작성
-  - Payroll 컨트랙트에 월별 루트 업로드 → `triggerPayroll` 테스트
-  - 회계 담당자 Dashboard(Firebase)에서 이벤트를 읽어 ‘급여 지급 완료’ 체크리스트 구현
+  - 급여 등록 → 수령(클레임) → 이벤트 로그 확인까지 E2E 실습
+  - 잘못된 수령 재시도 방지(0 세팅)와 require 메시지 점검
 
-### 세션 5: 컨트랙트 고도화 & 웹 연결 (p.71–90)
-- Proxy, AccessControl, gas 절감 패턴
-- wagmi + viem v2 사용한 프론트 통합
-- UI 테마 커스터마이즈 과제
+### 세션 5: 웹 연동 – 기본형 (p.71–90)
+- 지갑 연결(Connect) → 컨트랙트 쓰기 호출 → 이벤트 Toast 표시
+- wagmi + viem v2로 `pay`와 `claim` 버튼 구현
+- 최소 UI 구성: 주소 입력, 금액 입력, 상태 Toast
 
 ### 세션 6: 멘토링 & 서비스 아키텍처 (p.91–100)
 - 1:1 코드 리뷰, Gas 최적화 팁
@@ -224,9 +228,9 @@
 
 ---
 
-## 전체 컨트랙트 다이어그램
+## 전체 컨트랙트 다이어그램 (단순화: 2 컨트랙트)
 
-강의 전 범위를 포괄하는 결제(ShopRegistry) + 급여(Payroll) + 업그레이드/거버넌스 구성을 한눈에 볼 수 있는 클래스 다이어그램입니다.
+결제(ShopRegistry) + 급여(PayrollBasic) 두 컨트랙트만 포함한 기본 구조입니다.
 
 ```mermaid
 classDiagram
@@ -238,14 +242,7 @@ IERC20 : +transferFrom(address,address,uint256)
 IERC20 : +approve(address,uint256)
 IERC20 : +balanceOf(address) view
 
-class IPriceOracle
-IPriceOracle : +latestPrice() view returns(uint256)
-
-class MerkleProof
-class EnumerableSet
-
 class Ownable
-class AccessControl
 
 class Shop
 Shop : +limit uint256
@@ -261,48 +258,31 @@ ShopRegistry : +pay(id,amount)
 ShopRegistry : +getShop(id) view
 ShopRegistry : event Receipt(payer,shopId,amount)
 
-class Payroll
-Payroll : -stableToken IERC20
-Payroll : -oracle IPriceOracle
-Payroll : -payrollRoots mapping(uint256=>bytes32)
-Payroll : +setPayrollRoot(month,root) onlyRole(ADMIN)
-Payroll : +triggerPayroll(month,proof) onlyRole(PAYROLL)
-Payroll : +setOracle(addr) onlyRole(ADMIN)
-Payroll : event ProofOfPayment(employee,month,amount,fx)
+class PayrollBasic
+PayrollBasic : -stableToken IERC20
+PayrollBasic : -salaries mapping(address=>uint256)
+PayrollBasic : +setSalary(employee,amount) onlyOwner
+PayrollBasic : +claim()
+PayrollBasic : +payAll() onlyOwner
+PayrollBasic : event ProofOfPayment(employee,amount)
 
 class StableToken
 StableToken --|> IERC20
 
-class ShopRegistryProxy
-class PayrollProxy
-class ProxyAdmin
-class TimelockController
-
 class FrontendWeb
-class AccountingDashboard
 
 ShopRegistry o--> Shop : stores
 ShopRegistry --> IERC20 : uses
-ShopRegistry ..> EnumerableSet : uses
-Payroll --> IERC20 : pays
-Payroll ..> MerkleProof : verifies
-Payroll --> IPriceOracle : reads
+PayrollBasic --> IERC20 : pays
 
 ShopRegistry --|> Ownable
-Payroll --|> AccessControl
-
-ShopRegistryProxy ..> ShopRegistry : delegates
-PayrollProxy ..> Payroll : delegates
-ProxyAdmin --> ShopRegistryProxy : admin
-ProxyAdmin --> PayrollProxy : admin
-TimelockController --> ProxyAdmin : owner
+PayrollBasic --|> Ownable
 
 FrontendWeb ..> ShopRegistry : listens Receipt
-AccountingDashboard ..> Payroll : listens ProofOfPayment
+FrontendWeb ..> PayrollBasic : listens ProofOfPayment
 ```
 
-- StableToken은 외부 ERC20(USDC/DAI/위믹스 달러 등) 구현을 가정합니다.
-- 업그레이드 안전성 실습을 위해 `ProxyAdmin`의 소유자는 `TimelockController`로 설정합니다.
-- 오프체인 컴포넌트(FrontendWeb, AccountingDashboard)는 이벤트 구독만 수행합니다.
+- StableToken은 외부 ERC20(USDC/DAI 등) 구현을 가정합니다.
+- 오프체인 컴포넌트(FrontendWeb)는 이벤트 구독만 수행합니다.
 
-슬라이드 맵핑: 세션 2–3 → `ShopRegistry`, 세션 4 → `Payroll`·`MerkleProof`·`IPriceOracle`, 세션 5 → `TransparentUpgradeableProxy`·`AccessControl`.
+슬라이드 맵핑: 세션 2–3 → `ShopRegistry`, 세션 4 → `PayrollBasic`, 세션 5 → 웹 연동 기본(wagmi/viem).
