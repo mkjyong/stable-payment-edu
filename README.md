@@ -232,54 +232,54 @@
 classDiagram
 direction LR
 
-class IERC20 <<interface>>
+class IERC20
 IERC20 : +transfer(address,uint256)
 IERC20 : +transferFrom(address,address,uint256)
 IERC20 : +approve(address,uint256)
 IERC20 : +balanceOf(address) view
 
-class IPriceOracle <<interface>>
+class IPriceOracle
 IPriceOracle : +latestPrice() view returns(uint256)
 
-class MerkleProof <<library>>
-class EnumerableSet <<library>>
+class MerkleProof
+class EnumerableSet
 
 class Ownable
 class AccessControl
 
-class Shop <<struct>>
+class Shop
 Shop : +limit uint256
 Shop : +spent uint256
 Shop : +merchant address
 
-class ShopRegistry <<contract>>
+class ShopRegistry
 ShopRegistry : -stableToken IERC20
 ShopRegistry : -shops mapping(bytes32=>Shop)
 ShopRegistry : +registerShop(id,limit,merchant) onlyOwner
 ShopRegistry : +setLimit(id,newLimit) onlyOwner
 ShopRegistry : +pay(id,amount)
 ShopRegistry : +getShop(id) view
-ShopRegistry : <<event>> Receipt(payer,shopId,amount)
+ShopRegistry : event Receipt(payer,shopId,amount)
 
-class Payroll <<contract>>
+class Payroll
 Payroll : -stableToken IERC20
 Payroll : -oracle IPriceOracle
 Payroll : -payrollRoots mapping(uint256=>bytes32)
 Payroll : +setPayrollRoot(month,root) onlyRole(ADMIN)
 Payroll : +triggerPayroll(month,proof) onlyRole(PAYROLL)
 Payroll : +setOracle(addr) onlyRole(ADMIN)
-Payroll : <<event>> ProofOfPayment(employee,month,amount,fx)
+Payroll : event ProofOfPayment(employee,month,amount,fx)
 
-class StableToken <<external>>
+class StableToken
 StableToken --|> IERC20
 
-class ShopRegistryProxy <<proxy>>
-class PayrollProxy <<proxy>>
+class ShopRegistryProxy
+class PayrollProxy
 class ProxyAdmin
-class TimelockController <<governance>>
+class TimelockController
 
-class FrontendWeb <<offchain>>
-class AccountingDashboard <<offchain>>
+class FrontendWeb
+class AccountingDashboard
 
 ShopRegistry o--> Shop : stores
 ShopRegistry --> IERC20 : uses
